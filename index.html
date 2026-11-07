@@ -1,0 +1,629 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>SOUND STOPWATCH</title>
+
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:#111827;
+  color:#f9fafb;
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+  padding:20px;
+}
+.container{max-width:600px;margin:0 auto}
+header{text-align:center;margin:20px 0 30px}
+header h1{font-size:25px;letter-spacing:2px;margin:0}
+header p{color:#9ca3af;font-size:13px}
+.panel{
+  background:#1f2937;
+  border:1px solid #374151;
+  border-radius:16px;
+  padding:20px;
+  margin-bottom:15px;
+}
+.label{font-size:13px;color:#9ca3af;margin-bottom:10px}
+.timer{
+  text-align:center;
+  font-size:clamp(42px,11vw,65px);
+  font-weight:700;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:-2px;
+  margin:15px 0;
+}
+.status{text-align:center;font-size:14px;color:#9ca3af}
+.status.active{color:#34d399}
+.status.done{color:#fbbf24}
+.stats{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+}
+.stat{
+  background:#111827;
+  padding:15px;
+  border-radius:12px;
+  text-align:center;
+}
+.stat strong{display:block;font-size:26px}
+.stat span{font-size:12px;color:#9ca3af}
+input,select{
+  width:100%;
+  background:#111827;
+  color:white;
+  border:1px solid #4b5563;
+  padding:12px;
+  border-radius:9px;
+  font-size:16px;
+  outline:none;
+}
+input[type=range]{padding:0;accent-color:#34d399}
+select{margin-bottom:15px}
+.field{margin-bottom:20px}
+.field label{
+  display:block;
+  font-size:13px;
+  margin-bottom:9px;
+  color:#d1d5db;
+}
+.value{
+  float:right;
+  color:#34d399;
+}
+.meter-bg{
+  width:100%;
+  height:16px;
+  background:#111827;
+  border-radius:20px;
+  overflow:hidden;
+  margin-top:12px;
+}
+.meter{
+  height:100%;
+  width:0%;
+  background:#34d399;
+  border-radius:20px;
+  transition:width .04s linear;
+}
+.meter-info{
+  display:flex;
+  justify-content:space-between;
+  font-size:12px;
+  color:#9ca3af;
+  margin-top:8px;
+}
+.buttons{display:flex;gap:10px}
+button{
+  flex:1;
+  border:0;
+  border-radius:10px;
+  padding:15px 10px;
+  font-size:15px;
+  font-weight:700;
+  cursor:pointer;
+}
+button:disabled{opacity:.4;cursor:not-allowed}
+.primary{background:#059669;color:white}
+.secondary{background:#374151;color:white}
+.danger{background:#991b1b;color:white}
+button:active{transform:scale(.98)}
+.note{
+  font-size:12px;
+  line-height:1.8;
+  color:#9ca3af;
+}
+#history{
+  font-size:13px;
+  color:#d1d5db;
+  line-height:2;
+  max-height:150px;
+  overflow:auto;
+}
+.hidden{display:none}
+footer{
+  text-align:center;
+  color:#6b7280;
+  font-size:11px;
+  margin:25px 0;
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<header>
+  <h1>SOUND STOPWATCH</h1>
+  <p>Sound-triggered stopwatch</p>
+</header>
+
+<div class="panel">
+  <div class="label">STOPWATCH</div>
+  <div class="timer" id="timer">00:00.000</div>
+  <div class="status" id="status">マイク未接続</div>
+  <br>
+  <div class="stats">
+    <div class="stat">
+      <strong id="count">0 / 5</strong>
+      <span>検知回数</span>
+    </div>
+    <div class="stat">
+      <strong id="level">--</strong>
+      <span>音量レベル (%)</span>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="label">LIVE AUDIO MONITOR</div>
+  <div class="meter-bg">
+    <div class="meter" id="meter"></div>
+  </div>
+  <div class="meter-info">
+    <span>音量</span>
+    <span id="meterText">0%</span>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="label">SETTINGS</div>
+
+  <div class="field">
+    <label>検知方式</label>
+    <select id="mode">
+      <option value="peak">ピーク検知方式</option>
+      <option value="threshold">しきい値検知方式</option>
+    </select>
+  </div>
+
+  <div class="field">
+    <label>終了までの検知回数</label>
+    <input type="number" id="target" value="5" min="1" max="999">
+    <div class="note">最初の開始トリガーも1回としてカウントします。</div>
+  </div>
+
+  <div class="field" id="peakSettings">
+    <label>
+      ピーク検知感度
+      <span class="value" id="peakValue">35</span>
+    </label>
+    <input type="range" id="peakSensitivity" min="5" max="100" value="35">
+    <div class="note">周囲の音量からどれだけ急激に上昇したら検知するか。</div>
+  </div>
+
+  <div class="field hidden" id="thresholdSettings">
+    <label>
+      音量しきい値
+      <span class="value" id="thresholdValue">25</span>
+    </label>
+    <input type="range" id="thresholdSensitivity" min="1" max="100" value="25">
+    <div class="note">この音量を超えたら検知します。</div>
+  </div>
+
+  <div class="field">
+    <label>
+      クールダウン
+      <span class="value" id="coolValue">500 ms</span>
+    </label>
+    <input type="range" id="cooldown" min="150" max="2000" step="50" value="500">
+    <div class="note">連続した音を複数回カウントしないための間隔。</div>
+  </div>
+
+  <div class="field">
+    <label>
+      <input type="checkbox" id="beep" checked style="width:auto;vertical-align:middle">
+      開始・終了時にビープ音を鳴らす
+    </label>
+  </div>
+
+</div>
+
+<div class="panel">
+  <div class="label">CONTROL</div>
+  <div class="buttons">
+    <button class="primary" id="start">マイク接続・開始</button>
+    <button class="secondary" id="reset">リセット</button>
+  </div>
+  <br>
+  <button class="danger" id="stop" disabled>監視停止</button>
+</div>
+
+<div class="panel">
+  <div class="label">DETECTION HISTORY</div>
+  <div id="history">まだ検知されていません。</div>
+</div>
+
+<div class="panel note">
+  <strong>使い方</strong><br>
+  1. 検知方式と終了回数を設定します。<br>
+  2. 「マイク接続・開始」を押します。<br>
+  3. 最初の大きな音でストップウォッチが開始します。<br>
+  4. 指定回数の音を検知すると自動停止します。<br><br>
+  ※マイクの使用にはHTTPSまたはlocalhostが必要です。<br>
+  ※表示音量はマイク入力から算出した相対値であり、実際の騒音計のdB値ではありません。
+</div>
+
+<footer>SOUND STOPWATCH</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+let audioContext = null;
+let analyser = null;
+let microphone = null;
+let stream = null;
+let dataArray = null;
+let animationId = null;
+
+let monitoring = false;
+let running = false;
+let finished = false;
+
+let detected = 0;
+let target = 5;
+
+let startTime = 0;
+let elapsed = 0;
+
+let baseline = 0;
+let armed = true;
+let lastTrigger = 0;
+let belowSince = 0;
+
+let history = [];
+
+const timer = $('timer');
+const status = $('status');
+const meter = $('meter');
+
+function formatTime(ms){
+  const total = Math.floor(ms);
+  const minutes = Math.floor(total / 60000);
+  const seconds = Math.floor(total / 1000) % 60;
+  const milliseconds = total % 1000;
+
+  return String(minutes).padStart(2,'0') + ':' +
+    String(seconds).padStart(2,'0') + '.' +
+    String(milliseconds).padStart(3,'0');
+}
+
+function updateTimer(){
+  if(running){
+    elapsed = performance.now() - startTime;
+    timer.textContent = formatTime(elapsed);
+    requestAnimationFrame(updateTimer);
+  }
+}
+
+function setStatus(text,type=''){
+  status.textContent = text;
+  status.className = 'status ' + type;
+}
+
+function beep(frequency=880,duration=130){
+  if(!$('beep').checked || !audioContext) return;
+
+  try{
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+
+    oscillator.type = 'sine';
+    oscillator.frequency.value = frequency;
+
+    gain.gain.setValueAtTime(0.0001,audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(
+      0.18,audioContext.currentTime + 0.01
+    );
+    gain.gain.exponentialRampToValueAtTime(
+      0.0001,audioContext.currentTime + duration/1000
+    );
+
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + duration/1000 + 0.02);
+  }catch(e){
+    console.error(e);
+  }
+}
+
+function addHistory(text){
+  const time = new Date().toLocaleTimeString('ja-JP');
+  history.unshift(`${time} - ${text}`);
+
+  $('history').innerHTML = history
+    .map(x => {
+      const div = document.createElement('div');
+      div.textContent = x;
+      return div.outerHTML;
+    }).join('');
+
+  if(history.length > 30) history.pop();
+}
+
+function updateCount(){
+  $('count').textContent = `${detected} / ${target}`;
+}
+
+function trigger(){
+  if(!monitoring || finished) return;
+
+  detected++;
+  updateCount();
+
+  if(detected === 1){
+    running = true;
+    startTime = performance.now();
+
+    setStatus('計測中','active');
+    beep(880,150);
+
+    requestAnimationFrame(updateTimer);
+    addHistory('計測開始（1回目）');
+  }else{
+    beep(650,100);
+    addHistory(`${detected}回目の音を検知`);
+  }
+
+  if(detected >= target){
+    running = false;
+    finished = true;
+
+    elapsed = performance.now() - startTime;
+    timer.textContent = formatTime(elapsed);
+
+    setStatus('計測終了！','done');
+    beep(1100,350);
+
+    addHistory(`計測終了：${formatTime(elapsed)}`);
+  }
+}
+
+function getRMS(){
+  analyser.getFloatTimeDomainData(dataArray);
+
+  let sum = 0;
+
+  for(let i=0;i<dataArray.length;i++){
+    sum += dataArray[i] * dataArray[i];
+  }
+
+  return Math.sqrt(sum / dataArray.length);
+}
+
+function detectSound(rms){
+  const now = performance.now();
+
+  const mode = $('mode').value;
+  const cooldown = Number($('cooldown').value);
+
+  const peakSensitivity = Number($('peakSensitivity').value);
+  const threshold = Number($('thresholdSensitivity').value);
+
+  const level = Math.min(100, rms * 250);
+  $('level').textContent = Math.round(level);
+
+  meter.style.width = level + '%';
+  $('meterText').textContent = Math.round(level) + '%';
+
+  let isTrigger = false;
+  let releaseLevel = 0;
+
+  if(mode === 'peak'){
+    const difference = peakSensitivity / 100 * 0.12 + 0.008;
+
+    // 背景音量をゆっくり追跡
+    if(armed && rms < baseline + difference){
+      baseline = baseline * 0.97 + rms * 0.03;
+    }
+
+    const triggerLevel = baseline + difference;
+    releaseLevel = baseline + difference * 0.4;
+
+    isTrigger = rms > triggerLevel && rms > 0.012;
+
+  }else{
+    const triggerLevel = threshold / 100 * 0.4 + 0.005;
+
+    releaseLevel = triggerLevel * 0.65;
+    isTrigger = rms > triggerLevel;
+  }
+
+  // 検知後は一度音量が下がるまで再検知しない
+  if(!armed){
+    if(rms < releaseLevel){
+      if(!belowSince) belowSince = now;
+
+      if(now - belowSince >= 100 && now - lastTrigger >= cooldown){
+        armed = true;
+      }
+    }else{
+      belowSince = 0;
+    }
+    return;
+  }
+
+  if(isTrigger && now - lastTrigger >= cooldown){
+    armed = false;
+    belowSince = 0;
+    lastTrigger = now;
+    trigger();
+  }
+}
+
+function loop(){
+  if(!monitoring) return;
+
+  const rms = getRMS();
+  detectSound(rms);
+
+  animationId = requestAnimationFrame(loop);
+}
+
+async function startMonitoring(){
+  if(monitoring) return;
+
+  target = Number($('target').value);
+
+  if(!Number.isInteger(target) || target < 1 || target > 999){
+    alert('検知回数は1～999の整数で入力してください。');
+    return;
+  }
+
+  $('start').disabled = true;
+  setStatus('マイク接続中...');
+
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio:{
+        echoCancellation:false,
+        noiseSuppression:false,
+        autoGainControl:false
+      }
+    });
+
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    await audioContext.resume();
+
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0;
+
+    microphone = audioContext.createMediaStreamSource(stream);
+    microphone.connect(analyser);
+
+    dataArray = new Float32Array(analyser.fftSize);
+
+    monitoring = true;
+    finished = false;
+    running = false;
+
+    detected = 0;
+    elapsed = 0;
+    baseline = 0;
+    armed = true;
+    lastTrigger = 0;
+    belowSince = 0;
+
+    timer.textContent = '00:00.000';
+    updateCount();
+
+    setStatus('音声監視中・最初の音を待っています');
+    addHistory('音声監視開始');
+
+    $('stop').disabled = false;
+    loop();
+
+  }catch(error){
+    console.error(error);
+
+    setStatus('マイク接続エラー');
+
+    alert('マイクに接続できませんでした。\nHTTPS接続とマイクのアクセス許可を確認してください。');
+
+    $('start').disabled = false;
+  }
+}
+
+function stopMonitoring(){
+  monitoring = false;
+  running = false;
+
+  cancelAnimationFrame(animationId);
+
+  if(stream){
+    stream.getTracks().forEach(track => track.stop());
+    stream = null;
+  }
+
+  if(audioContext){
+    audioContext.close();
+    audioContext = null;
+  }
+
+  if(!finished){
+    setStatus('監視停止');
+  }
+
+  $('stop').disabled = true;
+  $('start').disabled = false;
+
+  meter.style.width = '0%';
+  $('meterText').textContent = '0%';
+  $('level').textContent = '--';
+}
+
+function reset(){
+  running = false;
+  finished = false;
+
+  detected = 0;
+  elapsed = 0;
+
+  baseline = 0;
+  armed = true;
+  lastTrigger = 0;
+  belowSince = 0;
+
+  timer.textContent = '00:00.000';
+
+  target = Number($('target').value) || 5;
+  updateCount();
+
+  history = [];
+  $('history').textContent = 'まだ検知されていません。';
+
+  if(monitoring){
+    setStatus('音声監視中・最初の音を待っています');
+  }else{
+    setStatus('マイク未接続');
+  }
+}
+
+$('start').addEventListener('click',startMonitoring);
+$('stop').addEventListener('click',stopMonitoring);
+$('reset').addEventListener('click',reset);
+
+$('mode').addEventListener('change',()=>{
+  const peak = $('mode').value === 'peak';
+
+  $('peakSettings').classList.toggle('hidden',!peak);
+  $('thresholdSettings').classList.toggle('hidden',peak);
+
+  baseline = 0;
+  armed = true;
+  belowSince = 0;
+});
+
+$('peakSensitivity').addEventListener('input',()=>{
+  $('peakValue').textContent = $('peakSensitivity').value;
+});
+
+$('thresholdSensitivity').addEventListener('input',()=>{
+  $('thresholdValue').textContent = $('thresholdSensitivity').value;
+});
+
+$('cooldown').addEventListener('input',()=>{
+  $('coolValue').textContent = $('cooldown').value + ' ms';
+});
+
+$('target').addEventListener('change',()=>{
+  if(!monitoring && !running){
+    target = Number($('target').value) || 5;
+    updateCount();
+  }
+});
+
+if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+  setStatus('この環境ではマイクを利用できません');
+}
+</script>
+</body>
+</html>
